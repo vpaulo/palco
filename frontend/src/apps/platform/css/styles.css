@@ -1,0 +1,46 @@
+/*
+| Tone | Color           | Hex Code  |
+| ---- | --------------- | --------- |
+| 1    | Soft White Grey | `#F8F9FA` |
+| 2    | Light Grey      | `#E9ECEF` |
+| 3    | Silver Grey     | `#DEE2E6` |
+| 4    | Cool Mid Grey   | `#ADB5BD` |
+| 5    | Neutral Grey    | `#6C757D` |
+| 6    | Steel Grey      | `#495057` |
+| 7    | Charcoal        | `#343A40` |
+| 8    | Near Black      | `#212529` |
+1–3 for backgrounds and UI surfaces.
+4–6 work great for text, icons, and borders.
+7–8 add contrast or can be used as primary text or accent colors in light themes.
+*/
+:root {
+  --white: #ffffff;
+  --soft-white-grey: #f8f9fa;
+  --light-grey: #e9ecef;
+  --silver-grey: #dee2e6;
+  --cool-mid-grey: #adb5bd;
+  --neutral-grey: #6c757d;
+  --steel-grey: #495057;
+  --charcoal: #343a40;
+  --near-black: #212529;
+  --black: #000000;
+}
+
+plc-platform {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 20px 1fr;
+  gap: 2px;
+  height: 100%;
+
+  background-color: var(--silver-grey);
+}
+
+plc-platform-navigation,
+plc-platform-content {
+  background-color: var(--white);
+}
+
+plc-platform-navigation {
+  display: flex;
+}
