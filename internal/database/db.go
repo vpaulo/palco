@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"path/filepath"
 
 	_ "modernc.org/sqlite"
@@ -10,6 +11,34 @@ import (
 
 type DB struct {
 	*sql.DB
+}
+
+func Run() *DB {
+	// Get database path
+	dbPath, err := GetDatabasePath()
+	if err != nil {
+		log.Fatalf("Failed to get database path: %v", err)
+	}
+
+	// Initialize database
+	db, err := New(dbPath)
+	if err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+
+	// Run migrations
+	migrationsPath, err := filepath.Abs("migrations")
+	if err != nil {
+		log.Fatalf("Failed to get migrations path: %v", err)
+	}
+
+	if err := RunMigrations(db, migrationsPath); err != nil {
+		log.Fatalf("Failed to run migrations: %v", err)
+	}
+
+	log.Println("Database initialized successfully")
+
+	return db
 }
 
 // New creates a new database connection
