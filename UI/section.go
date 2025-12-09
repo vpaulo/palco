@@ -4,8 +4,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func Section() lipgloss.Style {
+func Section(isActive bool) lipgloss.Style {
+	borderColor := subtle
+	if isActive {
+		borderColor = highlight
+	}
+
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(subtle)
+		BorderForeground(borderColor)
 }

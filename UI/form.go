@@ -19,13 +19,13 @@ func RenderForm(m Model) string {
 		fields = []string{"Name:", "Description:"}
 	} else if m.mode == ModeCreateTask {
 		title = "Create New Task"
-		fields = []string{"Title:", "Description:"}
+		fields = []string{"Title:", "Description:", "Priority:"}
 	} else if m.mode == ModeEditProject {
 		title = "Edit Project"
 		fields = []string{"Name:", "Description:"}
 	} else if m.mode == ModeEditTask {
 		title = "Edit Task"
-		fields = []string{"Title:", "Description:"}
+		fields = []string{"Title:", "Description:", "Priority:"}
 	} else if m.mode == ModeCreateNote {
 		title = "Create New Note"
 		fields = []string{"Content:"}

@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"fmt"
 	"palco/internal/database"
 	"palco/internal/database/models"
 	"palco/internal/repository"
+	"strconv"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -33,7 +35,8 @@ type projectsLoadedMsg struct {
 }
 
 type tasksLoadedMsg struct {
-	tasks []models.Task
+	tasks  []models.Task
+	depths []int
 }
 
 type notesLoadedMsg struct {
@@ -119,15 +122,18 @@ type Model struct {
 	// State
 	projects             []models.Project
 	tasks                []models.Task
+	taskDepths           []int // Depth level for each task (for indentation)
 	notes                []models.Note
 	selectedProjectIndex int
 	selectedTaskIndex    int
 	activeSection        int // 0: projects, 1: tasks, 2: notes, 3: details, 4: drafts
+	noteContext          int // 0: project notes, 1: task notes
 
 	// Form state
-	mode        int
-	formInputs  []textinput.Model
+	mode         int
+	formInputs   []textinput.Model
 	focusedInput int
+	parentTaskID *int64 // Used when creating a subtask
 }
 
 func (m Model) Init() tea.Cmd {
@@ -161,7 +167,8 @@ func (m *Model) initTaskForm() {
 	}
 
 	m.mode = ModeCreateTask
-	m.formInputs = make([]textinput.Model, 2)
+	m.parentTaskID = nil // Creating a top-level task
+	m.formInputs = make([]textinput.Model, 3)
 	m.focusedInput = 0
 
 	// Title input
@@ -176,6 +183,48 @@ func (m *Model) initTaskForm() {
 	m.formInputs[1].Placeholder = "Description (optional)"
 	m.formInputs[1].CharLimit = 1000
 	m.formInputs[1].Width = 50
+
+	// Priority input
+	m.formInputs[2] = textinput.New()
+	m.formInputs[2].Placeholder = "Priority (0=None, 1=Low, 2=Medium, 3=High, 4=Urgent)"
+	m.formInputs[2].SetValue("0")
+	m.formInputs[2].CharLimit = 1
+	m.formInputs[2].Width = 50
+}
+
+// initSubtaskForm initializes the form for creating a subtask
+func (m *Model) initSubtaskForm() {
+	if len(m.tasks) == 0 || len(m.projects) == 0 {
+		return
+	}
+
+	// Set parent task ID to the currently selected task
+	taskID := m.tasks[m.selectedTaskIndex].ID
+	m.parentTaskID = &taskID
+
+	m.mode = ModeCreateTask
+	m.formInputs = make([]textinput.Model, 3)
+	m.focusedInput = 0
+
+	// Title input
+	m.formInputs[0] = textinput.New()
+	m.formInputs[0].Placeholder = "Subtask title"
+	m.formInputs[0].Focus()
+	m.formInputs[0].CharLimit = 200
+	m.formInputs[0].Width = 50
+
+	// Description input
+	m.formInputs[1] = textinput.New()
+	m.formInputs[1].Placeholder = "Description (optional)"
+	m.formInputs[1].CharLimit = 1000
+	m.formInputs[1].Width = 50
+
+	// Priority input
+	m.formInputs[2] = textinput.New()
+	m.formInputs[2].Placeholder = "Priority (0=None, 1=Low, 2=Medium, 3=High, 4=Urgent)"
+	m.formInputs[2].SetValue("0")
+	m.formInputs[2].CharLimit = 1
+	m.formInputs[2].Width = 50
 }
 
 // createProject creates a new project from form inputs
@@ -217,7 +266,16 @@ func (m Model) createTask() tea.Msg {
 		description = &desc
 	}
 
-	task, err := m.TaskRepo.Create(projectID, nil, title, description, 0)
+	// Parse priority from form input (default to 0 if invalid)
+	priority := 0
+	if priorityStr := m.formInputs[2].Value(); priorityStr != "" {
+		if p, err := strconv.Atoi(priorityStr); err == nil && p >= 0 && p <= 4 {
+			priority = p
+		}
+	}
+
+	// Use parentTaskID if creating a subtask, otherwise nil for top-level task
+	task, err := m.TaskRepo.Create(projectID, m.parentTaskID, title, description, priority)
 	if err != nil {
 		// TODO: Handle error
 		return nil
@@ -258,8 +316,33 @@ func (m *Model) initEditProjectForm() {
 
 // initNoteForm initializes the form for creating a new note
 func (m *Model) initNoteForm() {
-	if len(m.tasks) == 0 {
-		return
+	// Check if we have a project or task to attach the note to
+	hasProject := len(m.projects) > 0
+	hasTask := len(m.tasks) > 0
+
+	// Determine context based on current noteContext (which is set when notes are loaded)
+	// Override if we're in the Projects or Tasks section directly
+	if m.activeSection == 0 {
+		// In Projects section - create project note
+		if !hasProject {
+			return
+		}
+		m.noteContext = 0
+	} else if m.activeSection == 1 {
+		// In Tasks section - create task note
+		if !hasTask {
+			return
+		}
+		m.noteContext = 1
+	} else {
+		// In Notes section or other - use current noteContext
+		// Validate we have the right entity
+		if m.noteContext == 0 && !hasProject {
+			return
+		}
+		if m.noteContext == 1 && !hasTask {
+			return
+		}
 	}
 
 	m.mode = ModeCreateNote
@@ -283,7 +366,7 @@ func (m *Model) initEditTaskForm() {
 	task := m.tasks[m.selectedTaskIndex]
 
 	m.mode = ModeEditTask
-	m.formInputs = make([]textinput.Model, 2)
+	m.formInputs = make([]textinput.Model, 3)
 	m.focusedInput = 0
 
 	// Title input
@@ -308,6 +391,13 @@ func (m *Model) initEditTaskForm() {
 
 	m.formInputs[1].CharLimit = 1000
 	m.formInputs[1].Width = 50
+
+	// Priority input
+	m.formInputs[2] = textinput.New()
+	m.formInputs[2].Placeholder = "Priority (0=None, 1=Low, 2=Medium, 3=High, 4=Urgent)"
+	m.formInputs[2].SetValue(fmt.Sprintf("%d", task.Priority))
+	m.formInputs[2].CharLimit = 1
+	m.formInputs[2].Width = 50
 }
 
 // updateProject updates the selected project from form inputs
@@ -344,13 +434,25 @@ func (m Model) createNote() tea.Msg {
 		return nil
 	}
 
-	if len(m.tasks) == 0 {
-		return nil
+	var note *models.Note
+	var err error
+
+	if m.noteContext == 0 {
+		// Create project note
+		if len(m.projects) == 0 {
+			return nil
+		}
+		projectID := m.projects[m.selectedProjectIndex].ID
+		note, err = m.NoteRepo.CreateForProject(projectID, content)
+	} else {
+		// Create task note
+		if len(m.tasks) == 0 {
+			return nil
+		}
+		taskID := m.tasks[m.selectedTaskIndex].ID
+		note, err = m.NoteRepo.CreateForTask(taskID, content)
 	}
 
-	taskID := m.tasks[m.selectedTaskIndex].ID
-
-	note, err := m.NoteRepo.CreateForTask(taskID, content)
 	if err != nil {
 		// TODO: Handle error
 		return nil
@@ -372,8 +474,16 @@ func (m Model) updateTask() tea.Msg {
 
 	task := m.tasks[m.selectedTaskIndex]
 
+	// Parse priority from form input (default to current priority if invalid)
+	priority := task.Priority
+	if priorityStr := m.formInputs[2].Value(); priorityStr != "" {
+		if p, err := strconv.Atoi(priorityStr); err == nil && p >= 0 && p <= 4 {
+			priority = p
+		}
+	}
+
 	// Update task
-	updatedTask, err := m.TaskRepo.Update(task.ID, title, task.Priority, task.Completed)
+	updatedTask, err := m.TaskRepo.Update(task.ID, title, priority, task.Completed)
 	if err != nil {
 		// TODO: Handle error
 		return nil
@@ -482,7 +592,55 @@ func (m Model) loadTasks() tea.Msg {
 		// TODO: Add error handling
 		return tasksLoadedMsg{tasks: []models.Task{}}
 	}
-	return tasksLoadedMsg{tasks: tasks}
+
+	// Organize tasks hierarchically (parents followed by their children, recursively)
+	hierarchicalTasks, depths := organizeTasksHierarchically(tasks)
+
+	return tasksLoadedMsg{tasks: hierarchicalTasks, depths: depths}
+}
+
+// organizeTasksHierarchically reorganizes tasks so subtasks appear under their parents (recursively)
+func organizeTasksHierarchically(tasks []models.Task) ([]models.Task, []int) {
+	if len(tasks) == 0 {
+		return tasks, []int{}
+	}
+
+	// Build a map of parent ID to children
+	subtasksByParent := make(map[int64][]models.Task)
+	var rootTasks []models.Task
+
+	for _, task := range tasks {
+		if task.ParentTaskID.Valid {
+			parentID := task.ParentTaskID.Int64
+			subtasksByParent[parentID] = append(subtasksByParent[parentID], task)
+		} else {
+			rootTasks = append(rootTasks, task)
+		}
+	}
+
+	// Recursively build the hierarchical list
+	var result []models.Task
+	var depths []int
+
+	var addTaskAndChildren func(task models.Task, depth int)
+	addTaskAndChildren = func(task models.Task, depth int) {
+		result = append(result, task)
+		depths = append(depths, depth)
+
+		// Add children recursively
+		if children, exists := subtasksByParent[task.ID]; exists {
+			for _, child := range children {
+				addTaskAndChildren(child, depth+1)
+			}
+		}
+	}
+
+	// Add all root tasks and their descendants
+	for _, rootTask := range rootTasks {
+		addTaskAndChildren(rootTask, 0)
+	}
+
+	return result, depths
 }
 
 // loadNotes loads notes for the currently selected task
@@ -498,6 +656,24 @@ func (m Model) loadNotes() tea.Msg {
 		// TODO: Add error handling
 		return notesLoadedMsg{notes: []models.Note{}}
 	}
+	m.noteContext = 1 // Task notes context
+	return notesLoadedMsg{notes: notes}
+}
+
+// loadProjectNotes loads notes for the currently selected project
+func (m Model) loadProjectNotes() tea.Msg {
+	if len(m.projects) == 0 || m.selectedProjectIndex >= len(m.projects) {
+		return notesLoadedMsg{notes: []models.Note{}}
+	}
+
+	projectID := m.projects[m.selectedProjectIndex].ID
+	notes, err := m.NoteRepo.GetByProjectID(projectID)
+	if err != nil {
+		// For now, return empty slice on error
+		// TODO: Add error handling
+		return notesLoadedMsg{notes: []models.Note{}}
+	}
+	m.noteContext = 0 // Project notes context
 	return notesLoadedMsg{notes: notes}
 }
 
@@ -509,13 +685,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.projects = msg.projects
 		if len(m.projects) > 0 {
 			m.selectedProjectIndex = 0
-			return m, m.loadTasks
+			return m, tea.Batch(m.loadTasks, m.loadProjectNotes)
 		}
 		return m, nil
 
 	// Handle tasks loaded
 	case tasksLoadedMsg:
 		m.tasks = msg.tasks
+		m.taskDepths = msg.depths
 		m.selectedTaskIndex = 0
 		if len(m.tasks) > 0 {
 			return m, m.loadNotes
@@ -542,6 +719,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Handle task updated
 	case taskUpdatedMsg:
+		m.mode = ModeNormal
+		m.formInputs = nil
 		return m, m.loadTasks
 
 	// Handle project deleted
@@ -558,6 +737,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case noteCreatedMsg:
 		m.mode = ModeNormal
 		m.formInputs = nil
+		if m.noteContext == 0 {
+			return m, m.loadProjectNotes
+		}
 		return m, m.loadNotes
 
 	// Handle window resize
@@ -633,7 +815,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Navigate projects
 				if m.selectedProjectIndex > 0 {
 					m.selectedProjectIndex--
-					return m, m.loadTasks
+					return m, tea.Batch(m.loadTasks, m.loadProjectNotes)
 				}
 			} else if m.activeSection == 1 && len(m.tasks) > 0 {
 				// Navigate tasks
@@ -648,7 +830,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Navigate projects
 				if m.selectedProjectIndex < len(m.projects)-1 {
 					m.selectedProjectIndex++
-					return m, m.loadTasks
+					return m, tea.Batch(m.loadTasks, m.loadProjectNotes)
 				}
 			} else if m.activeSection == 1 && len(m.tasks) > 0 {
 				// Navigate tasks
@@ -706,9 +888,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
+		// Create subtask
+		case "s":
+			if m.activeSection == 1 && len(m.tasks) > 0 {
+				// Create subtask for selected task
+				m.initSubtaskForm()
+			}
+			return m, nil
+
 		// Show help
 		case "?":
 			m.mode = ModeHelp
+			return m, nil
+
+		// Direct section navigation
+		case "1":
+			m.activeSection = 0 // Projects
+			return m, nil
+		case "2":
+			m.activeSection = 1 // Tasks
+			return m, nil
+		case "3":
+			m.activeSection = 2 // Notes
+			return m, nil
+		case "4":
+			m.activeSection = 3 // Details
+			return m, nil
+		case "5":
+			m.activeSection = 4 // Drafts
 			return m, nil
 		}
 	}

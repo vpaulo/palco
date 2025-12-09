@@ -21,9 +21,9 @@ func Projects(m Model) string {
 		content = renderProjectList(m)
 	}
 
-	return Section().Width(col1Width).Height(row1Height - 2).Render(
+	return Section(m.activeSection == 0).Width(col1Width).Height(row1Height - 2).Render(
 		lipgloss.JoinVertical(lipgloss.Left,
-			listHeader("Projects"),
+			listHeader("Projects [1]"),
 			content,
 		),
 	)

@@ -26,9 +26,9 @@ func Tasks(m Model) string {
 		content = renderTaskList(m)
 	}
 
-	return Section().Width(col1Width).Height(row2Height - 2).Render(
+	return Section(m.activeSection == 1).Width(col1Width).Height(row2Height - 2).Render(
 		lipgloss.JoinVertical(lipgloss.Left,
-			listHeader("Tasks"),
+			listHeader("Tasks [2]"),
 			content,
 		),
 	)
@@ -42,9 +42,27 @@ func renderTaskList(m Model) string {
 			cursor = ">"
 		}
 
+		// Determine indentation based on depth level
+		depth := 0
+		if i < len(m.taskDepths) {
+			depth = m.taskDepths[i]
+		}
+
+		indent := ""
+		prefix := ""
+		if depth > 0 {
+			// Two spaces per level of depth
+			indent = lipgloss.NewStyle().Width(depth * 2).Render("")
+			prefix = "└─"  // Tree branch character
+		}
+
 		title := task.Title
-		if len(title) > 23 {
-			title = title[:20] + "..."
+		maxTitleLen := 23 - (depth * 2) - len(prefix)
+		if maxTitleLen < 5 {
+			maxTitleLen = 5 // Minimum title length
+		}
+		if len(title) > maxTitleLen {
+			title = title[:maxTitleLen-3] + "..."
 		}
 
 		// Add completion indicator
@@ -53,7 +71,7 @@ func renderTaskList(m Model) string {
 			status = "[✓]"
 		}
 
-		items[i] = fmt.Sprintf("%s %s %s", cursor, status, title)
+		items[i] = fmt.Sprintf("%s %s%s%s %s", cursor, indent, prefix, status, title)
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, items...)
