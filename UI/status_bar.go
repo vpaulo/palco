@@ -65,7 +65,7 @@ func StatusBar(m Model) string {
 		case 0:
 			statusMsg = "n:New  e:Edit  d:Delete  ↑↓:Navigate  Tab:Switch"
 		case 1:
-			statusMsg = "n:New  e:Edit  d:Delete  Space:Toggle  ↑↓:Navigate"
+			statusMsg = "n:New  s:Subtask  e:Edit  d:Delete  Space:Toggle  ↑↓:Navigate"
 		case 2:
 			statusMsg = "n:New Note  ↑↓:Navigate  Tab:Switch"
 		default:

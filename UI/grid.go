@@ -27,7 +27,7 @@ func Grid(m Model) string {
 		),
 		lipgloss.NewStyle().Render(
 			lipgloss.JoinVertical(lipgloss.Left,
-				Section().Width(col3Width).Height(m.height-3).Render("Drafts"),
+				Section(m.activeSection == 4).Width(col3Width).Height(m.height-3).Render("Drafts [5]"),
 			),
 		),
 	)

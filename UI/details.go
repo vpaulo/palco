@@ -25,9 +25,9 @@ func Details(m Model) string {
 			Render("Select a project or task to view details")
 	}
 
-	return Section().Width(col2Width).Height(m.height - 3).Render(
+	return Section(m.activeSection == 3).Width(col2Width).Height(m.height - 3).Render(
 		lipgloss.JoinVertical(lipgloss.Left,
-			listHeader("Details"),
+			listHeader("Details [4]"),
 			content,
 		),
 	)
